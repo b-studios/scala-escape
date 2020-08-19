@@ -11,6 +11,9 @@ trait EscUtils {
   def dprintln(x: =>Any): Unit = if (debug) println(x)
 
   lazy val MarkerLocal = rootMirror.getRequiredClass("scala.util.escape.local")
+  lazy val ModuleEscape = rootMirror.getRequiredModule("scala.util.escape")
+
+  def isBuiltin(s: Symbol) = (s != null) && s.hasTransOwner(ModuleEscape)
 
   protected def newLocalMarker() = newMarker(MarkerLocal)
   protected def newLocalMarker(tpe: Type) = newMarker(appliedType(MarkerLocal, tpe))
@@ -29,10 +32,6 @@ trait EscUtils {
 
   // TODO: proper symbol ref
   def isPercentMarker(x: Symbol) = x.toString == "object %"
-
-  // Stubbed, since we droped @safe
-  def safeArgAnn(tpe: Type): Set[Symbol] = Set.empty
-
 
 
 }
