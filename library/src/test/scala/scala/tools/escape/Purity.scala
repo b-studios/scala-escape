@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 
 class PurityTestSuite extends CompilerTesting {
 
-
   def test = {
 
     // Creating a Box[T, Nothing] requires all free variables to be <:< @captures[Nothing]
@@ -70,4 +69,43 @@ class PurityTestSuite extends CompilerTesting {
       a let { _ + 1 }
     })
   }
+
+
+  val mapPure =
+    """
+      | def mapPure[A, B](l: List[Pure[A]])(f: Pure[Pure[A] => B]): List[B] = l match {
+      |   case Nil => Nil
+      |   case (head :: tail) =>
+      |     f let { fsafe =>
+      |       fsafe(head) :: mapPure(tail)(f)
+      |   }
+      | }
+      |""".stripMargin
+
+  @Test def cannotReferenceImpureListInMap = expectEscErrorOutput(
+    "value l cannot be used here. The current scope is expected to only capture: Nothing",
+    mapPure ++ """
+    val l: List[Pure[Int]] = List(pure(1), pure(2), pure(3))
+
+    mapPure(l)(pure[Pure[Int] => Int] { a =>
+      l
+      a let { _ + 1 }
+    })
+    """)
+
+  @Test def cannotPassCapAsPureParameter = expectEscErrorOutput(
+    "value cap cannot be used here. It is expected to capture: Nothing",
+    """
+    val cap = 0
+    def foo(@pure x: Int): Int = x
+    foo(cap)
+    """)
+
+  @Test def cannotStoreCapInPureVariable = expectEscErrorOutput(
+    "value cap cannot be used here. It is expected to capture: Nothing",
+    """
+    val cap = 0
+    @pure var x = 1
+    x = cap
+    """)
 }

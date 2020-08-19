@@ -69,7 +69,6 @@ abstract class EscTransform extends PluginComponent with Transform with
         case Ident(x) =>
 
           if (!(symCapabilities(tree.symbol) <:< m)) {
-            println(x, symCapabilities(tree.symbol))
             reporter.error(tree.pos, tree.symbol + " cannot be used here. It is expected to capture: " + m + "")
           } else {
             for (b <- boundaries) {
