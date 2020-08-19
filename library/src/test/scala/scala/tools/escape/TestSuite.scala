@@ -304,7 +304,7 @@ class TryCatch extends CompilerTesting {
   @Test def trycatch5: Unit = { () =>
     def trycatch(f: (Exception => Nothing) -> Int): Int = ???
 
-    def safeMethod(f: Unit -> Int): Int @ safe(f) = ???
+    def safeMethod(f: Unit -> Int): Int = ???
 
     trycatch { raise =>
 
