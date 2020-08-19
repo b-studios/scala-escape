@@ -33,7 +33,7 @@ abstract class EscTransform extends PluginComponent with Transform with
       bs.forall(_.owner.owner.hasTransOwner(a.owner))
 
     // FIXME: proper sym lookup
-    def isSndFun(tpe: Type) = tpe.toString.startsWith("scala.util.escape.->") || tpe.toString.startsWith("->")
+    def isSndFun(tpe: Type) = tpe.toString.startsWith("scala.util.escape") || tpe.toString.contains("->")
 
 
     //def isSndSym(s: Symbol) = !isFstSym(s) //s.hasAnnotation(MarkerLocal)
@@ -59,7 +59,7 @@ abstract class EscTransform extends PluginComponent with Transform with
 */
 
     // m is the mode -- here read "the capabilities that are allowed to be captured"
-    def traverse(tree: Tree, m: Type): Unit = {
+    def traverse(tree: global.Tree, m: global.Type, boundaries: List[global.Symbol]): Unit = {
       curTree = tree
 
       if (isBuiltin(tree.symbol)) return
@@ -67,16 +67,25 @@ abstract class EscTransform extends PluginComponent with Transform with
       tree match {
         case Literal(x) =>
         case Ident(x) =>
+
           if (!(symCapabilities(tree.symbol) <:< m)) {
-            // 2nd class vars are not 1st class
+            println(x, symCapabilities(tree.symbol))
             reporter.error(tree.pos, tree.symbol + " cannot be used here. It is expected to capture: " + m + "")
+          } else {
+            for (b <- boundaries) {
+              if (!tree.symbol.hasTransOwner(b)) {
+                val m = symCapabilities(b)
+                if (!(symCapabilities(tree.symbol) <:< m))
+                  reporter.error(tree.pos, tree.symbol + s" cannot be used here. The current scope is expected to only capture: ${m}")
+              }
+            }
           }
 
         case Select(qual, name) =>
-          traverse(qual, m)
+          traverse(qual, m, boundaries)
 
         case Apply(fun, args) =>
-          traverse(fun, m)
+          traverse(fun, m, boundaries)
 
           // find out mode to use for each parameter (1st or 2nd)
           val modes = fun.tpe match {
@@ -100,31 +109,31 @@ abstract class EscTransform extends PluginComponent with Transform with
           // for varargs, assume 2nd class (pad to args.length)
           map2(args, modes.padTo(args.length, Impure)) { (a, mode) =>
             // TODO compute the intersection of arg-mode and the current m
-            if (mode <:< m) traverse(a, mode) else traverse(a, m)
+            if (mode <:< m) traverse(a, mode, boundaries) else traverse(a, m, boundaries)
           }
 
         case TypeApply(fun, args) =>
-          traverse(fun, m)
+          traverse(fun, m, boundaries)
 
         case Assign(lhs, rhs) =>
           // TODO: what if var is @local?
           //traverse(rhs,symMode(tree.symbol),boundary)
-          traverse(rhs, Pure)
+          traverse(rhs, Pure, boundaries)
 
         case If(cond, thenp, elsep) =>
-          traverse(cond, m)
-          traverse(thenp, m)
-          traverse(elsep, m)
+          traverse(cond, m, boundaries)
+          traverse(thenp, m, boundaries)
+          traverse(elsep, m, boundaries)
 
         case LabelDef(name, params, rhs) =>
-          traverse(rhs, m)
+          traverse(rhs, m, boundaries)
 
         case TypeDef(mods, name, tparams, rhs) =>
-          traverse(rhs, m)
+          traverse(rhs, m, boundaries)
 
         case ValDef(mods, name, tpt, rhs) =>
           // TODO shouldn't we check the RHS with m? What is the annotation here?
-          traverse(rhs, symCapabilities(tree.symbol))
+          traverse(rhs, symCapabilities(tree.symbol), boundaries)
 
         case DefDef(mods, name, tparams, vparamss, tpt, rhs) if tree.symbol.isConstructor =>
         // do nothing
@@ -132,16 +141,14 @@ abstract class EscTransform extends PluginComponent with Transform with
         case DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
           //println(s"--- recurse $m def: ${tree.symbol}")
 
-//          vparamss.flatten.map { p => p.symbol }
-
-          traverse(rhs, m)
+          val boundary1 = tree.symbol::boundaries
+          traverse(rhs, Impure, boundary1)
 
         case Function(vparams, body) =>
-          //println(s"--- recurse $m func: ${tree.tpe}")
-
-          // if this def is 1st class, take it as new boundary
           tree.symbol.addAnnotation(newLocalMarker(m))
-          traverse(body, m)
+          val boundary1 = tree.symbol :: boundaries
+          // function bodies are always 1st class
+          traverse(body, Impure, boundary1)
 
 
         // Look for SAM closure corresponding to `->`
@@ -187,12 +194,12 @@ abstract class EscTransform extends PluginComponent with Transform with
           bd.symbol.addAnnotation(newLocalMarker(m))
 
           // go and check body
-          traverse(brhs, m)
+          traverse(brhs, Impure, bd.symbol :: boundaries)
 
 
         case Block(stats, expr) =>
-          stats.foreach(s => traverse(s, m))
-          traverse(expr, m)
+          stats.foreach(s => traverse(s, m, boundaries))
+          traverse(expr, m, boundaries)
 
         case This(qual) => // TODO: ok?
 
@@ -201,39 +208,39 @@ abstract class EscTransform extends PluginComponent with Transform with
         case New(tpt) => // TODO: what?
 
         case Typed(expr, tpt) => // TODO: what?
-          traverse(expr, m)
+          traverse(expr, m, boundaries)
 
         case EmptyTree =>
 
         case Super(qual, mix) =>
-          traverse(qual, m)
+          traverse(qual, m, boundaries)
 
         case Throw(expr) =>
-          traverse(expr, m)
+          traverse(expr, m, boundaries)
 
         case Return(expr) =>
-          traverse(expr, m)
+          traverse(expr, m, boundaries)
 
         case Import(expr, selectors) =>
-          traverse(expr, Impure)
+          traverse(expr, Impure, boundaries)
 
         case Match(selector, cases) =>
-          traverse(selector, m)
+          traverse(selector, m, boundaries)
           cases foreach { case cd@CaseDef(pat, guard, body) =>
-            traverse(body, m)
+            traverse(body, m, boundaries)
           }
 
         case Try(block, catches, finalizer) =>
-          traverse(block, m)
+          traverse(block, m, boundaries)
           catches foreach { case cd@CaseDef(pat, guard, body) =>
-            traverse(body, m)
+            traverse(body, m, boundaries)
           }
-          traverse(finalizer, m)
+          traverse(finalizer, m, boundaries)
 
         case ClassDef(mods, name, params, impl) =>
           //println(s"--- recurse $m class: ${tree.symbol}")
           atOwner(tree.symbol) {
-            traverse(impl, m)
+            traverse(impl, m, boundaries)
           }
 
         case Template(parents, self, body) =>
@@ -288,15 +295,15 @@ abstract class EscTransform extends PluginComponent with Transform with
             }
 
             // now check body (TODO: 2? 1?)
-            body.foreach(s => traverse(s, Impure))
+            body.foreach(s => traverse(s, Impure, boundaries))
           }
 
         case ModuleDef(mods, name, impl) =>
-          traverse(impl, m)
+          traverse(impl, m, boundaries)
 
         case PackageDef(pid, stats) =>
           atOwner(tree.symbol) {
-            stats.foreach(s => traverse(s, m))
+            stats.foreach(s => traverse(s, m, boundaries))
           }
 
         case _ =>
@@ -307,7 +314,7 @@ abstract class EscTransform extends PluginComponent with Transform with
 
     override def transform(tree: Tree): Tree = {
       // we start in an impure context, where everything can be captured
-      traverse(tree, Impure)
+      traverse(tree, Impure, Nil)
       tree
     }
   }
