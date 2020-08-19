@@ -68,6 +68,59 @@ class PurityTestSuite extends CompilerTesting {
       // l
       a let { _ + 1 }
     })
+
+    def parametric[E](x: Box[() => Int, E]) = x let { f =>
+      f()
+    }
+
+    class Exc {
+      def raise() = sys error "Fail!"
+    }
+
+    def handle[R](@pure prog: Exc => R)(@pure handler: () => R): R =
+     try { prog(new Exc()) } catch {
+       case e => handler()
+     }
+
+    // with the above signature, we can of course leak the exc capability
+    (handle { exc => exc } { () => ??? }).raise()
+
+    // if we want to express that exc cannot be part of the return type, R has to be wrapped in Pure
+    def handle2[R](@pure prog: Exc => Pure[R])(@pure handler: () => Pure[R]): Pure[R] =
+      handle(prog)(handler)
+
+    // now this will not type check anymore:
+    //    (handle2 { exc => pure { exc } } { () => ??? }) let { exc =>
+    //      exc.raise()
+    //    }
+
+    // typically, a handler would not care if a handled program closes over other capabilities and we
+    // would thus write:
+    def handle3[R](prog: Exc => Pure[R])(handler: () => R): R =
+      try { prog(new Exc()).extract } catch {
+        case e => handler()
+      }
+
+    // of course this seems very restrictive since the result cannot close over *anything*
+    handle3 { exc =>
+      if (Math.random() > 0.5)
+        exc.raise()
+      else
+        pure { () }
+    } {
+      () => ()
+    }
+
+    // but remember, that the result can close over pure values
+    handle3 { exc =>
+      @pure val rand = Math.random()
+      if (rand > 0.5)
+        exc.raise()
+      else
+        pure { rand }
+    } {
+      () => 0.0
+    }
   }
 
 
