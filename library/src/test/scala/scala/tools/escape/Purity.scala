@@ -28,9 +28,21 @@ class PurityTestSuite extends CompilerTesting {
     @pure val n = 4
     foo(n)
 
+    // mutable variables can also be declared as @pure
+    @pure var z = 4
+
     def bar(@pure y: Int) = pure {
-      1 + y
+      1 + z
     }
+
+    // but that means they cannot close over things:
+    // @pure var z2 = cap // value cap cannot be used here.
+
+    // we can store pure values in pure variables:
+    def writer(@pure x: Int) = z = x
+
+    // trying the same with something impure does not work:
+    // def writer2(x: Int) = z = x
 
     def baz(b: Pure[Int]) = {
       b let { x =>
