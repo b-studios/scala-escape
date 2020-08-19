@@ -10,15 +10,23 @@ class PurityTestSuite extends CompilerTesting {
 
   def test = {
 
-    // Creating a Box[T, Nothing] requires all bindings in the environment to be binding <:< @local[Nothing]
-
+    // Creating a Box[T, Nothing] requires all free variables to be <:< @captures[Nothing]
     val x = pure { 4 }
 
     val cap = 42
 
     def foo(@pure x: Int): Int = x
 
+    // in the paper the above is not possible, there you would need to write
+
+    def foo2(x: Pure[Int]): Int = x let { v => v }
+
     foo(2)
+    foo2(pure { 2 })
+
+    // what is also not possible in the paper is to annotate val bindings:
+    @pure val n = 4
+    foo(n)
 
     def bar(@pure y: Int) = pure {
       1 + y
@@ -41,7 +49,8 @@ class PurityTestSuite extends CompilerTesting {
     val l: List[Pure[Int]] = List(pure(1), pure(2), pure(3))
 
     mapPure(l)(pure[Pure[Int] => Int] { a =>
-      //l
+      // referencing l here is not allowed:
+      // l
       a let { _ + 1 }
     })
   }
