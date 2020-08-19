@@ -41,8 +41,12 @@ class PurityTestSuite extends CompilerTesting {
     // we can store pure values in pure variables:
     def writer(@pure x: Int) = z = x
 
+    // impure things can be stored in impure variables
+    var state = 0
+    state = cap
+
     // trying the same with something impure does not work:
-    // def writer2(x: Int) = z = x
+//     def writer2(x: Int) = z = x
 
     def baz(b: Pure[Int]) = {
       b let { x =>

@@ -116,9 +116,7 @@ abstract class EscTransform extends PluginComponent with Transform with
           traverse(fun, m, boundaries)
 
         case Assign(lhs, rhs) =>
-          // TODO: what if var is @local?
-          //traverse(rhs,symMode(tree.symbol),boundary)
-          traverse(rhs, Pure, boundaries)
+          traverse(rhs, symCapabilities(lhs.symbol), boundaries)
 
         case If(cond, thenp, elsep) =>
           traverse(cond, m, boundaries)
