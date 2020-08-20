@@ -13,8 +13,21 @@ class PurityTestSuite extends CompilerTesting {
     sealed trait B
     sealed trait C
 
-    def test(@captures[A with B] x: Int, @captures[A] y: Int): Box[Int, A with B with C] = box {
-      x + 1 + y
+    class Exc {
+      def raise() = sys error "Fail!"
+    }
+    class Print {
+      def print(msg: String) = println(msg)
+    }
+    // some "global" capabilities
+    val exc: Exc = new Exc {}
+    val print: Print = new Print {}
+
+    @pure def test(
+        @captures[exc.type] f: () => Int,
+        @captures[exc.type with print.type] g: () => Int
+    ) = box [Int, exc.type with print.type] {
+      f() + 1 + g()
     }
 
     val b: Box[Int, Empty] = ???
@@ -86,10 +99,6 @@ class PurityTestSuite extends CompilerTesting {
 
     def parametric[E](x: Box[() => Int, E]) = x let { f =>
       f()
-    }
-
-    class Exc {
-      def raise() = sys error "Fail!"
     }
 
     def handle[R](@pure prog: Exc => R)(@pure handler: () => R): R =
