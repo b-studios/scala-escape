@@ -37,7 +37,7 @@ abstract class EscTransform extends PluginComponent with Transform with
 
 
     //def isSndSym(s: Symbol) = !isFstSym(s) //s.hasAnnotation(MarkerLocal)
-    def isFstSym(s: Symbol): Boolean = symCapabilities(s) <:< Pure
+    def isFstSym(s: Symbol): Boolean = Pure <:< symCapabilities(s)
 
     def symCapabilities(s: Symbol) =
       s.getAnnotation(MarkerLocal) match {
@@ -45,8 +45,9 @@ abstract class EscTransform extends PluginComponent with Transform with
         case Some(s) => s.atp.typeArgs(0)
       }
 
-    lazy val Pure = NothingTpe
-    lazy val Impure = AnyTpe
+    lazy val Pure = AnyTpe
+    lazy val Impure = NothingTpe
+
     /*
     TODO:
 
@@ -68,13 +69,13 @@ abstract class EscTransform extends PluginComponent with Transform with
         case Literal(x) =>
         case Ident(x) =>
 
-          if (!(symCapabilities(tree.symbol) <:< m)) {
+          if (!(m <:< symCapabilities(tree.symbol))) {
             reporter.error(tree.pos, tree.symbol + " cannot be used here. It is expected to capture: " + m + "")
           } else {
             for (b <- boundaries) {
               if (!tree.symbol.hasTransOwner(b)) {
                 val m = symCapabilities(b)
-                if (!(symCapabilities(tree.symbol) <:< m))
+                if (!(m <:< symCapabilities(tree.symbol)))
                   reporter.error(tree.pos, tree.symbol + s" cannot be used here. The current scope is expected to only capture: ${m}")
               }
             }
@@ -86,15 +87,24 @@ abstract class EscTransform extends PluginComponent with Transform with
         case Apply(fun, args) =>
           traverse(fun, m, boundaries)
 
+
           // find out mode to use for each parameter (1st or 2nd)
           val modes = fun.tpe match {
             case mt@MethodType(params, restpe) =>
               fun match {
-                case Apply(TypeApply(Select(qual, name), _), _) => // TBD correct or need to apply type manually?
-                  params.map(s => symCapabilities(s).asSeenFrom(qual.tpe, fun.symbol.owner))
-                case TypeApply(Select(qual, name), _) => // TBD correct or need to apply type manually?
-                  params.map(s => symCapabilities(s).asSeenFrom(qual.tpe, fun.symbol.owner))
+                case Apply(TypeApply(Select(qual, name), targs), _) =>
+                  val tps = fun.symbol.typeParams
+                  val tas = targs.map { _.tpe }
+                  params.map(s => symCapabilities(s).asSeenFrom(qual.tpe, fun.symbol.owner).subst(tps, tas))
+                case TypeApply(Select(qual, name), targs) =>
+                  // we need to substitute
+                  val tps = fun.symbol.typeParams
+                  val tas = targs.map { _.tpe }
+                  // println(tps.toString() + " -> " + tas)
+
+                  params.map(s => symCapabilities(s).asSeenFrom(qual.tpe, fun.symbol.owner).subst(tps, tas) )
                 case Select(qual, name) =>
+
                   params.map(s => symCapabilities(s).asSeenFrom(qual.tpe, fun.symbol.owner))
                 case Ident(_) =>
                   params.map(s => symCapabilities(s))
@@ -108,7 +118,7 @@ abstract class EscTransform extends PluginComponent with Transform with
           // for varargs, assume 2nd class (pad to args.length)
           map2(args, modes.padTo(args.length, Impure)) { (a, mode) =>
             // TODO compute the intersection of arg-mode and the current m
-            if (mode <:< m) traverse(a, mode, boundaries) else traverse(a, m, boundaries)
+            if (m <:< mode) traverse(a, mode, boundaries) else traverse(a, m, boundaries)
           }
 
         case TypeApply(fun, args) =>

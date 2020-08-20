@@ -9,10 +9,17 @@ class PurityTestSuite extends CompilerTesting {
 
   def test = {
 
+    sealed trait A
+    sealed trait B
+    sealed trait C
 
-    val b: Box[Int, Nothing] = ???
+    def test(@captures[A with B] x: Int, @captures[A] y: Int): Box[Int, A with B with C] = box {
+      x + 1 + y
+    }
 
-    val b2: Box[Int, Any] = b
+    val b: Box[Int, Empty] = ???
+
+    val b2: Box[Int, Nothing] = b
 
     // Creating a Box[T, Nothing] requires all free variables to be <:< @captures[Nothing]
     val x = pure { 4 }
@@ -144,7 +151,7 @@ class PurityTestSuite extends CompilerTesting {
       |""".stripMargin
 
   @Test def cannotReferenceImpureListInMap = expectEscErrorOutput(
-    "value l cannot be used here. The current scope is expected to only capture: Nothing",
+    "value l cannot be used here. The current scope is expected to only capture: util.escape.Empty",
     mapPure ++ """
     val l: List[Pure[Int]] = List(pure(1), pure(2), pure(3))
 
@@ -155,7 +162,7 @@ class PurityTestSuite extends CompilerTesting {
     """)
 
   @Test def cannotPassCapAsPureParameter = expectEscErrorOutput(
-    "value cap cannot be used here. It is expected to capture: Nothing",
+    "value cap cannot be used here. It is expected to capture: util.escape.Empty",
     """
     val cap = 0
     def foo(@pure x: Int): Int = x
@@ -163,7 +170,7 @@ class PurityTestSuite extends CompilerTesting {
     """)
 
   @Test def cannotStoreCapInPureVariable = expectEscErrorOutput(
-    "value cap cannot be used here. It is expected to capture: Nothing",
+    "value cap cannot be used here. It is expected to capture: util.escape.Empty",
     """
     val cap = 0
     @pure var x = 1
