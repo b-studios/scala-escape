@@ -9,6 +9,11 @@ class PurityTestSuite extends CompilerTesting {
 
   def test = {
 
+
+    val b: Box[Int, Nothing] = ???
+
+    val b2: Box[Int, Any] = b
+
     // Creating a Box[T, Nothing] requires all free variables to be <:< @captures[Nothing]
     val x = pure { 4 }
 

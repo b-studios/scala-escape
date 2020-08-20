@@ -3,12 +3,12 @@ package object escape {
 
   import scala.annotation.{Annotation, StaticAnnotation, TypeConstraint}
 
-  class captures[-T] extends StaticAnnotation with TypeConstraint
+  class captures[T] extends StaticAnnotation with TypeConstraint
 
   type pure = captures[Nothing]
   type Pure[T] = Box[T, Nothing]
 
-  sealed trait Box[+T, -E] {
+  sealed trait Box[+T, +E] {
     def extract: T
     def let[R](f: T -> R): R = f(extract)
   }
