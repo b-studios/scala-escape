@@ -145,6 +145,13 @@ class PurityTestSuite extends CompilerTesting {
     } {
       () => 0.0
     }
+
+    // Pure function and pure argument implies pure result:
+    def subsumePurity[A, B](f: Pure[Pure[A] => B]): Pure[Pure[A] => Pure[B]] = f let { fv =>
+      pure {
+        a => a let { av => pure { fv(box { av }) } }
+      }
+    }
   }
 
 
