@@ -38,7 +38,10 @@ class PurityTestSuite extends CompilerTesting {
     // @pure var z2 = cap // value cap cannot be used here.
 
     // we can store pure values in pure variables:
-    def writer(@pure x: Int) = z = x
+    @pure def writer(@pure x: Int) = z = x
+
+    // actually, this is fine since both writer, as well as its argument are declared pure
+    @pure val storingResult = writer(3)
 
     // impure things can be stored in impure variables
     var state = 0
