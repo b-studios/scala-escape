@@ -10,6 +10,8 @@ package object escape {
   type Empty = Any
 
   type pure = captures[Empty]
+  type impure = captures[Nothing]
+  
   type Pure[T] = Box[T, Empty]
 
   sealed trait Box[+T, -E] {
