@@ -13,6 +13,7 @@ package object escape {
   type impure = captures[Nothing]
   
   type Pure[T] = Box[T, Empty]
+  type Impure[T] = Box[T, Nothing]
 
   sealed trait Box[+T, -E] {
     def extract: T
@@ -20,6 +21,10 @@ package object escape {
   }
 
   def pure[T](@captures[Empty] value: T): Box[T, Empty] = new Box[T, Empty] {
+    def extract = value
+  }
+
+  def impure[T](@captures[Nothing] value: T): Impure[T] = new Box[T, Nothing] {
     def extract = value
   }
 

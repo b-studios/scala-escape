@@ -186,7 +186,7 @@ class PurityTestSuite extends CompilerTesting {
       // implementation effects.
       //
       // However, it also forces users of Impl to assume `impure`. 
-      type effect <: exc.type with print.type
+      type effect >: Nothing <: exc.type with print.type
 
       // the annotation should be inherited, but currently is not.
       @captures[effect]
@@ -220,9 +220,16 @@ class PurityTestSuite extends CompilerTesting {
     // but should with this:
     @captures[exc.type with print.type with read.type]
     val res = polyId(impl).extract
+
+    // Impure Values
+    // -------------
+    val someImpureBox: Impure[Int] = impure {
+      sys error "I am impure!"
+    }
+
+    @impure
+    def impureFunction() = someImpureBox.extract
   }
-
-
 
   val mapPure =
     """
