@@ -19,9 +19,18 @@ class PurityTestSuite extends CompilerTesting {
     class Print {
       def print(msg: String) = println(msg)
     }
+    class Read {
+      def read(): String = "hello"
+    }
     // some "global" capabilities
     val exc: Exc = new Exc {}
     val print: Print = new Print {}
+    val read: Read = new Read {}
+
+    // currently singleton types and captures are not yet connected
+    @captures[exc.type] def raise() = ()
+    @captures[print.type] def log(msg: String) = ()
+    @captures[read.type] def readLine(msg: String) = ()
 
     @pure def test(
         @captures[exc.type] f: () => Int,
@@ -152,7 +161,67 @@ class PurityTestSuite extends CompilerTesting {
         a => a let { av => pure { fv(box { av }) } }
       }
     }
+
+
+    // Integration with OO
+    // -------------------
+    trait Effectful {
+      type effect
+    }
+    // Abstract methods should be annotated with `@captures[effect]` which corresponds
+    // to the captures of `this`.
+    //
+    // concrete methods "can" be made more precise.
+    trait Interface extends Effectful {
+      @captures[effect] def foo(): Int
+      @captures[effect] def bar(): Unit
+    }
+    
+    // TODO this annotation is still ignored -- it should be inferred to be 
+    //      @captures[exc.type with print.type]
+    @pure
+    class Impl extends Interface {
+
+      // Using a bound here allows subtypes of Impl to capture more
+      // implementation effects.
+      //
+      // However, it also forces users of Impl to assume `impure`. 
+      type effect <: exc.type with print.type
+
+      // the annotation should be inherited, but currently is not.
+      @captures[effect]
+      def foo() = { raise(); 0 }
+
+      // the annotation should be inherited, but currently is not.
+      @captures[effect] 
+      def bar() = { log(foo().toString) }
+    }
+
+
+    // Effect polymorphism
+    // -------------------
+    @pure def polyId(@captures[e.effect] e: Impl): Box[Unit, e.effect] = box {
+      e.bar()
+    }
+    // callsite (here we know the effects of Impl precisely)
+    class SubImpl extends Impl {
+      type effect = exc.type with print.type with read.type 
+    }
+
+    @captures[impl.effect] 
+    val impl = new SubImpl
+
+    @captures[exc.type with print.type with read.type] 
+    val alias = impl
+    
+    // shouldn't type check with this annotation:
+    //   @captures[exc.type with print.type]
+    //
+    // but should with this:
+    @captures[exc.type with print.type with read.type]
+    val res = polyId(impl).extract
   }
+
 
 
   val mapPure =
